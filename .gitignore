@@ -1,0 +1,16 @@
+# Your personal setup — publication name and user ID, saved by the
+# first-run wizard. Never share this; it's specific to your account.
+substack_app_config.json
+
+# Generated every time the app runs — your real database, CSVs, and
+# dashboard, all containing your real Substack data.
+output/
+
+# Python cache files, safe to regenerate, never worth committing.
+__pycache__/
+*.pyc
+
+# Common OS/editor clutter.
+.DS_Store
+Thumbs.db
+*.swp
