@@ -1,0 +1,253 @@
+# Substack App — Setup & Usage Guide
+
+A free, self-hosted dashboard for your own Substack stats — posts, Notes,
+subscribers, comments, and traffic sources, tracked over time on your own
+computer. No subscription, no third-party service, no data ever leaves
+your machine.
+
+This guide assumes no technical background. Every step is spelled out.
+Total setup time: about 10 minutes, once.
+
+---
+
+## How this works, in one paragraph
+
+Substack doesn't offer an official way to export all of this data. This
+app works by using your own logged-in browser session to ask Substack for
+the same information your own Substack dashboard already shows you — just
+gathered into one place and saved over time, so you can see trends instead
+of just a snapshot. Nothing here is official or guaranteed by Substack, but
+it's built to fail safely: if something ever breaks, it tells you clearly
+rather than showing you wrong numbers.
+
+---
+
+## What you'll need
+
+- **A Windows or Mac computer** (this guide uses Windows screenshots'
+  worth of description; Mac steps are the same with different menus)
+- **Google Chrome**, logged into your Substack
+- **Python**, a free program — if you don't have it, Step 1 covers
+  installing it (takes 3 minutes)
+- 10 minutes
+
+---
+
+## Step 1 — Install Python (skip if you already have it)
+
+1. Go to **[python.org/downloads](https://python.org/downloads)**
+2. Click the big yellow "Download Python" button
+3. Run the installer
+4. **Important:** on the first install screen, check the box that says
+   **"Add python.exe to PATH"** (or "Add Python to PATH") before clicking
+   Install. This is the single most common setup mistake — if you skip
+   it, nothing else in this guide will work until you reinstall with that
+   box checked.
+
+To check whether Python is already installed: open Command Prompt
+(search "cmd" in your Start menu) and type:
+```
+python --version
+```
+If you see something like `Python 3.12.1`, you're already set — skip to
+Step 2.
+
+---
+
+## Step 2 — Put the app files in a folder
+
+1. Create a new folder anywhere you like — for example, on your Desktop,
+   named `Substack App`
+2. Move every file from this download into that folder, including the
+   `Substack App - Cookie Extension` folder — everything should be
+   directly inside your one folder, nothing nested any deeper than that
+
+---
+
+## Step 3 — Install the Chrome extension (grabs your login cookie)
+
+This extension is what lets the app act as "you" when asking Substack for
+your stats — the same way your browser already proves who you are every
+time you visit your own dashboard. It never sends anything anywhere except
+your own clipboard.
+
+1. Open Chrome and go to `chrome://extensions` in the address bar
+2. Turn on **Developer mode** — a toggle switch in the top-right corner
+3. Click **Load unpacked**
+4. Select the `Substack App - Cookie Extension` folder (the whole folder,
+   not a file inside it)
+5. You should now see "Substack App Cookie Copier" in your extensions list
+6. Click the puzzle-piece icon in Chrome's toolbar (near the address bar)
+   and pin this extension so it's always one click away
+
+---
+
+## Step 4 — Get your cookie
+
+1. Go to your own Substack (e.g. `yourpublication.substack.com`), logged
+   in as yourself, in Chrome
+2. Click the Substack App Cookie Copier icon you just pinned
+3. Click **"Copy cookie to clipboard"**
+4. You'll see a confirmation message with a character count — that means
+   it worked and your cookie is now copied
+
+Now save it where the app can find it:
+
+5. Open Notepad (or any plain text editor)
+6. Paste (Ctrl+V)
+7. Save the file as exactly: `.substack_cookie.txt`
+   - **Windows:** save it directly in your user folder — click "This PC"
+     → your Windows username folder (usually `C:\Users\YourName`) — not
+     inside Documents, Desktop, or any OneDrive/Google Drive folder
+   - **Mac:** save it in your Home folder (Finder → Go → Home)
+   - In the Notepad "Save As" box, make sure "Save as type" is set to
+     **All Files**, not "Text Documents" — otherwise Windows will secretly
+     save it as `.substack_cookie.txt.txt`, which won't work
+
+**Why outside Documents/OneDrive/Google Drive specifically:** this cookie
+is a live login credential — anyone who has it can act as you on Substack
+until it expires (typically days to weeks). Keeping it out of any
+cloud-synced folder means it never accidentally gets uploaded anywhere.
+
+**This step will need repeating every few weeks**, whenever your cookie
+expires — same two clicks (extension → copy → paste over the old file).
+
+---
+
+## Step 5 — Run it for the first time
+
+1. Inside your `Substack App` folder, double-click **`Substack App - Run
+   Dashboard.bat`**
+2. A black window (Command Prompt) will open. The first time only, it'll
+   ask you two quick questions:
+
+   **"Your subdomain:"** — type the part of your Substack address before
+   `.substack.com`. If your Substack is at `example.substack.com`, type
+   `example`
+
+   **"Your numeric user ID:"** — a number, not your name. The window will
+   walk you through finding it:
+   - Go to `substack.com/notes`, logged in
+   - Press **F12** to open DevTools
+   - Click the **Network** tab near the top of the DevTools panel
+   - Click the **Fetch/XHR** filter button
+   - Refresh the page (F5)
+   - Look through the list on the left for something starting with
+     `profile/` followed by a number — for example `profile/123456789`
+   - That number is your user ID — type it in and press Enter
+
+3. That's it for setup — it's saved and won't ask again. The app will now
+   start pulling your real data (this first pull can take a few minutes,
+   since it goes through your full history) and open your dashboard in
+   Chrome automatically when done.
+
+If it prints an error about a missing cookie, that just means Step 4
+didn't quite land — double check the filename and location, then
+double-click the same `.bat` file again.
+
+---
+
+## Day-to-day use
+
+You don't need to redo any of the above again. From here on:
+
+| To do this... | Double-click this file |
+|---|---|
+| Full refresh (all your history) | `Substack App - Run Dashboard.bat` |
+| Quick refresh, last 7 days only | `Substack App - Refresh Last 7 Days.bat` |
+| Quick refresh, last 14 days | `Substack App - Refresh Last 14 Days.bat` |
+| Quick refresh, last 30 days | `Substack App - Refresh Last 30 Days.bat` |
+| Just reopen the dashboard, no new data | run the full refresh, then use the **↻ Refresh** button inside the dashboard itself |
+
+The "last N days" options are much faster than a full refresh, and are
+what you'll want most days — a full refresh is worth doing every week or
+two to make sure nothing drifts.
+
+### Optional: control everything from your browser instead
+
+If you'd rather click buttons in the dashboard itself instead of
+double-clicking files:
+
+1. Double-click **`Substack App - Start Server.bat`** once — leave that
+   black window open in the background
+2. Your browser opens automatically to `http://localhost:8765/dashboard.html`
+   — **bookmark this address**
+3. A Control Panel now appears at the top of the dashboard with buttons
+   for every refresh option above, plus a live progress log right in the
+   page
+
+You'll need to double-click "Start Server" again each time you restart
+your computer or close that window — everything else after that happens
+in the browser.
+
+---
+
+## What's in the dashboard
+
+- **Posts** — views, opens, likes, restacks, and traffic sources (where
+  your readers actually come from — email, direct links, social, etc.)
+  for every published post
+- **Notes** — reactions, restacks, replies, and impressions for every
+  Note you've posted, broken down by type (plain text, sharing a post,
+  images, links)
+- **Comments** — reader comments left on your posts, with a link back to
+  read each one in context
+- **Subscribers** — growth over time, broken down by free/paid/founding
+- **Log** — a record of every time you've pulled data, so you always know
+  when your numbers were last updated
+
+Every table can be searched, sorted by clicking any column header, and
+filtered by year and month. Click any post or note row to see its
+individual history over time.
+
+### The content strategy button
+
+At the top of the dashboard, there's a **"📋 Copy content strategy
+prompt"** button. Click it, and it copies a prompt to your clipboard built
+from your real last-30-days performance — your top posts, top notes, and
+what's actually resonating. Paste it into a conversation with Claude (or
+any AI assistant) for content ideas grounded in your real numbers, not
+generic advice.
+
+---
+
+## Troubleshooting
+
+**"Could not find 'python' or 'py' on your PATH"**
+Python isn't installed, or was installed without the "Add to PATH" box
+checked. Reinstall from python.org and make sure that box is checked.
+
+**"ERROR: No Substack cookie found"**
+Redo Step 4 — your cookie file is either missing, in the wrong location,
+or accidentally saved as `.txt.txt`. Check "Save as type: All Files" in
+Notepad's save dialog.
+
+**A pull runs but every number comes back as zero / empty**
+Almost always an expired cookie. Redo Step 4 (click the extension, copy,
+paste over the old file) and try again.
+
+**The dashboard opens but looks broken / unstyled**
+Make sure every file from the download — including `Substack App -
+Dashboard.css` and `Substack App - Dashboard.js` — is in the same folder
+as `Substack App - Main.py`, not moved or renamed.
+
+**Something else looks wrong**
+The terminal window that opens when you run the app prints exactly what
+it's doing at each step — if a specific piece of data (like Comments,
+or Traffic Sources) isn't showing up, the terminal will usually say so
+directly rather than failing silently. That message is the best starting
+point for figuring out what happened.
+
+---
+
+## Privacy notes
+
+- Your cookie and all your pulled data stay on your own computer, in the
+  `output` folder — nothing is sent to any third party
+- The Chrome extension only ever reads cookies for Substack pages you
+  have open yourself, and only copies to your own clipboard when you
+  click the button — it doesn't run in the background or send anything
+  anywhere
+- If you ever want to fully remove this app, delete the folder — there's
+  nothing installed elsewhere on your system except the Chrome extension,
+  which you can remove from `chrome://extensions`
