@@ -5,12 +5,18 @@
 <style>
   body {
     font-family: -apple-system, 'Segoe UI', sans-serif;
-    width: 280px;
+    width: 320px;
     padding: 16px;
     color: #1B2321;
   }
   h1 {
     font-size: 14px;
+    margin: 0 0 8px;
+  }
+  .hint {
+    font-size: 11px;
+    color: #4B564F;
+    line-height: 1.4;
     margin: 0 0 12px;
   }
   button {
@@ -26,6 +32,29 @@
   }
   button:hover { background: #24413e; }
   button:disabled { background: #999; cursor: default; }
+  #preview {
+    margin: 0 0 12px;
+    padding: 10px 12px;
+    background: #F4F6F3;
+    border-radius: 4px;
+    font-size: 12px;
+    line-height: 1.45;
+  }
+  #preview div {
+    display: flex;
+    justify-content: space-between;
+    gap: 12px;
+  }
+  #preview div + div { margin-top: 4px; }
+  #preview dt {
+    color: #4B564F;
+    font-weight: 500;
+  }
+  #preview dd {
+    margin: 0;
+    text-align: right;
+    word-break: break-all;
+  }
   #status {
     margin-top: 12px;
     font-size: 12px;
@@ -37,8 +66,14 @@
 </style>
 </head>
 <body>
-  <h1>Substack Cookie Copier</h1>
-  <button id="copyBtn">Copy cookie to clipboard</button>
+  <h1>Substack Session Copier</h1>
+  <p class="hint">Open your publication while logged in. This copies your cookie, subdomain, and numeric user ID together.</p>
+  <dl id="preview" hidden>
+    <div><dt>Subdomain</dt><dd id="pubValue">—</dd></div>
+    <div><dt>User ID</dt><dd id="uidValue">—</dd></div>
+    <div><dt>Cookies</dt><dd id="cookieValue">—</dd></div>
+  </dl>
+  <button id="copyBtn">Copy session to clipboard</button>
   <div id="status"></div>
   <script src="popup.js"></script>
 </body>

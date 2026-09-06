@@ -6,12 +6,13 @@ then builds a local dashboard and opens it in your browser automatically.
 
 FIRST-TIME SETUP: just run it.
     python main.py
-The first time you run this, it walks you through a short interactive
-setup (your publication name and your Substack user ID — about 60
-seconds) and saves your answers so every run after that skips straight
-to pulling your real data. See "Substack App - Setup & Usage Guide.md"
-for the full walkthrough, including how to get your session cookie
-using the included Chrome extension.
+The first time you run this, it looks in your cookie file for the
+publication subdomain and numeric user ID that the Chrome extension
+copies alongside the session cookie. If those are there, setup is
+automatic. If not, it walks you through a short interactive prompt
+and saves your answers so every run after that skips straight to
+pulling your real data. See "Substack App - Setup & Usage Guide.md"
+for the full walkthrough.
 
 Cookies expire periodically (days to weeks). If the script starts
 erroring with HTTP 401/403, get a fresh one the same way you did the
@@ -58,15 +59,103 @@ from urllib.error import HTTPError, URLError
 
 # ==================== FIRST-RUN SETUP WIZARD ====================
 CONFIG_PATH = "substack_app_config.json"
+# Cookie file lives outside any cloud-synced folder. The Chrome
+# extension copies a JSON bundle (cookie + subdomain + user ID) here;
+# older files that contain only the raw cookie string still work.
+COOKIE_FILE_PATH = os.path.expanduser("~/.substack_cookie.txt")
 
 
-def run_setup_wizard():
+def normalize_publication(value):
+    """Turn a URL or hostname into the publication subdomain, or None."""
+    if value is None:
+        return None
+    raw = str(value).strip()
+    raw = raw.replace("https://", "").replace("http://", "")
+    raw = raw.split(".substack.com")[0].split("/")[0].split(":")[0].strip()
+    reserved = {"", "www", "open", "on", "support", "substack.com"}
+    if raw.lower() in reserved:
+        return None
+    return raw or None
+
+
+def parse_session_bundle(raw):
+    """Parse a cookie file / env-var payload.
+
+    Accepts the Chrome extension's JSON bundle::
+
+        {"publication": "example", "user_id": "123", "cookie": "..."}
+
+    or a legacy raw cookie string. Returns a dict with cookie,
+    publication, and user_id (each None when missing).
+    """
+    result = {"cookie": None, "publication": None, "user_id": None}
+    if raw is None:
+        return result
+    text = raw.strip()
+    if not text:
+        return result
+
+    if text.startswith("{"):
+        try:
+            data = json.loads(text)
+        except json.JSONDecodeError:
+            result["cookie"] = text
+            return result
+        if isinstance(data, dict) and (
+            "cookie" in data or "publication" in data or "subdomain" in data or "user_id" in data
+        ):
+            cookie = data.get("cookie")
+            if isinstance(cookie, str) and cookie.strip():
+                result["cookie"] = cookie.strip()
+            publication = normalize_publication(
+                data.get("publication") or data.get("subdomain")
+            )
+            if publication:
+                result["publication"] = publication
+            user_id = data.get("user_id")
+            if user_id is not None and str(user_id).strip().isdigit():
+                result["user_id"] = str(user_id).strip()
+            return result
+
+    result["cookie"] = text
+    return result
+
+
+def read_session_bundle():
+    """Load the session bundle from SUBSTACK_COOKIE or the cookie file."""
+    env_cookie = os.environ.get("SUBSTACK_COOKIE")
+    if env_cookie:
+        return parse_session_bundle(env_cookie)
+    if os.path.exists(COOKIE_FILE_PATH):
+        try:
+            with open(COOKIE_FILE_PATH, "r", encoding="utf-8") as f:
+                content = f.read()
+            return parse_session_bundle(content)
+        except OSError:
+            pass
+    return parse_session_bundle(None)
+
+
+def get_cookie():
+    """Return the cookie string, checking env var first, then the file."""
+    return read_session_bundle().get("cookie")
+
+
+def save_config(publication, user_id):
+    config = {"publication": publication, "user_id": str(user_id)}
+    with open(CONFIG_PATH, "w", encoding="utf-8") as f:
+        json.dump(config, f, indent=2)
+
+
+def run_setup_wizard(prefill=None):
     """
     Interactive one-time setup, run automatically the first time this
-    script is used (whenever substack_app_config.json doesn't exist yet).
+    script is used (whenever substack_app_config.json doesn't exist yet
+    and the cookie file doesn't already contain both values).
     Collects your publication subdomain and your numeric Substack user
     ID, and saves them so this never has to run again.
     """
+    prefill = prefill or {}
     print("=" * 60)
     print("FIRST-TIME SETUP")
     print("=" * 60)
@@ -76,49 +165,61 @@ def run_setup_wizard():
     print("pulling your real data.")
     print()
 
-    print("1. What's your Substack publication's subdomain?")
-    print("   This is the part before '.substack.com' in your own Substack's")
-    print("   web address. If your Substack is at https://example.substack.com,")
-    print("   enter: example")
-    print()
-    publication = None
-    while not publication:
-        raw = input("   Your subdomain: ").strip()
-        raw = raw.replace("https://", "").replace("http://", "")
-        raw = raw.split(".substack.com")[0].split("/")[0].strip()
-        if raw:
-            publication = raw
-        else:
-            print("   That didn't look right — please enter just the subdomain part.")
-    print(f"   Got it: {publication}.substack.com")
-    print()
+    publication = normalize_publication(prefill.get("publication"))
+    if publication:
+        print(f"1. Subdomain (from your cookie file): {publication}.substack.com")
+        print()
+    else:
+        print("1. What's your Substack publication's subdomain?")
+        print("   This is the part before '.substack.com' in your own Substack's")
+        print("   web address. If your Substack is at https://example.substack.com,")
+        print("   enter: example")
+        print()
+        print("   The Chrome extension now copies this for you — if you re-copy")
+        print("   your session and paste it into the cookie file, you can skip")
+        print("   typing it here next time.")
+        print()
+        while not publication:
+            raw = input("   Your subdomain: ").strip()
+            publication = normalize_publication(raw)
+            if not publication:
+                print("   That didn't look right — please enter just the subdomain part.")
+        print(f"   Got it: {publication}.substack.com")
+        print()
 
-    print("2. What's your numeric Substack user ID?")
-    print("   This is a number, not your name or handle. Fastest way to find")
-    print("   it (you'll be in DevTools for the cookie step anyway, so this")
-    print("   is a quick extra look while you're already there):")
-    print()
-    print("   - Go to substack.com/notes, logged in as yourself")
-    print("   - Open DevTools (press F12) -> Network tab -> filter 'Fetch/XHR'")
-    print("   - Refresh the page")
-    print("   - Look for a request whose name starts with 'profile/' followed")
-    print("     by a number, e.g. 'profile/123456789'")
-    print("   - That number is your user ID")
-    print()
-    print("   (Full step-by-step screenshots are in the Setup & Usage guide")
-    print("   if you'd rather follow along there.)")
-    print()
-    user_id = None
-    while not user_id:
-        raw = input("   Your numeric user ID: ").strip()
-        if raw.isdigit():
-            user_id = raw
-        else:
-            print("   That should be digits only, no letters or symbols — try again.")
+    user_id = prefill.get("user_id")
+    if user_id is not None:
+        user_id = str(user_id).strip()
+        if not user_id.isdigit():
+            user_id = None
+    if user_id:
+        print(f"2. User ID (from your cookie file): {user_id}")
+        print()
+    else:
+        print("2. What's your numeric Substack user ID?")
+        print("   This is a number, not your name or handle. Fastest way to find")
+        print("   it is to use the Chrome extension included in this folder,")
+        print("   which now copies it with your cookie. If you'd rather look it")
+        print("   up yourself:")
+        print()
+        print("   - Go to substack.com/notes, logged in as yourself")
+        print("   - Open DevTools (press F12) -> Network tab -> filter 'Fetch/XHR'")
+        print("   - Refresh the page")
+        print("   - Look for a request whose name starts with 'profile/' followed")
+        print("     by a number, e.g. 'profile/123456789'")
+        print("   - That number is your user ID")
+        print()
+        print("   (Full step-by-step screenshots are in the Setup & Usage guide")
+        print("   if you'd rather follow along there.)")
+        print()
+        while not user_id:
+            raw = input("   Your numeric user ID: ").strip()
+            if raw.isdigit():
+                user_id = raw
+            else:
+                print("   That should be digits only, no letters or symbols — try again.")
 
-    config = {"publication": publication, "user_id": user_id}
-    with open(CONFIG_PATH, "w", encoding="utf-8") as f:
-        json.dump(config, f, indent=2)
+    save_config(publication, user_id)
 
     print()
     print(f"Saved. Publication: {publication}.substack.com | User ID: {user_id}")
@@ -134,8 +235,8 @@ def run_setup_wizard():
 
 
 def load_config():
-    """Loads publication + user ID from the saved config file, running
-    the one-time setup wizard first if it doesn't exist yet."""
+    """Loads publication + user ID from the saved config file, the cookie
+    file / SUBSTACK_COOKIE bundle, or the one-time setup wizard."""
     if os.path.exists(CONFIG_PATH):
         try:
             with open(CONFIG_PATH, "r", encoding="utf-8") as f:
@@ -143,8 +244,19 @@ def load_config():
             if saved.get("publication") and saved.get("user_id"):
                 return saved["publication"], saved["user_id"]
         except (json.JSONDecodeError, KeyError):
-            pass  # fall through to the wizard if the file got corrupted
-    return run_setup_wizard()
+            pass  # fall through if the file got corrupted
+
+    bundle = read_session_bundle()
+    if bundle.get("publication") and bundle.get("user_id"):
+        save_config(bundle["publication"], bundle["user_id"])
+        print(
+            f"Using publication and user ID from your cookie file: "
+            f"{bundle['publication']}.substack.com | {bundle['user_id']}"
+        )
+        print()
+        return bundle["publication"], bundle["user_id"]
+
+    return run_setup_wizard(prefill=bundle)
 
 
 # ==================== CONFIGURATION ====================
@@ -185,27 +297,7 @@ COMMENTS_LIMIT_PER_POST = 200     # UNVERIFIED cap — see fetch_post_comments()
 # of aggregate-only, at explicit user request). This data — and the
 # generated dashboard.html containing it — lives inside a cloud-synced
 # folder, same as everything else in this project.
-
-# Where your saved cookie file lives, if you're using Option B above.
-# Point this outside any cloud-synced folder.
-COOKIE_FILE_PATH = os.path.expanduser("~/.substack_cookie.txt")
 # =========================================================
-
-
-def get_cookie():
-    """Return the cookie string, checking env var first, then the file."""
-    env_cookie = os.environ.get("SUBSTACK_COOKIE")
-    if env_cookie:
-        return env_cookie
-    if os.path.exists(COOKIE_FILE_PATH):
-        try:
-            with open(COOKIE_FILE_PATH, "r", encoding="utf-8") as f:
-                content = f.read().strip()
-            if content:
-                return content
-        except OSError:
-            pass
-    return None
 
 
 def print_no_cookie_error():
@@ -218,8 +310,8 @@ def print_no_cookie_error():
     print(f"Option B — save it to a file (needed for unattended/scheduled runs):")
     print(f"  {COOKIE_FILE_PATH}")
     print()
-    print("See the setup instructions at the top of this file for how to")
-    print("get the cookie value itself from DevTools.")
+    print("Use the Chrome extension to copy your session (cookie, subdomain,")
+    print("and user ID) and paste that into the file.")
 
 
 PUBLICATION, OWN_USER_ID = load_config()
