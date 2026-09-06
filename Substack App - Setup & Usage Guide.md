@@ -59,8 +59,11 @@ Step 2.
 1. Create a new folder anywhere you like — for example, on your Desktop,
    named `Substack App`
 2. Move every file from this download into that folder, including the
-   `Substack App - Cookie Extension` folder — everything should be
-   directly inside your one folder, nothing nested any deeper than that
+   `Substack App - Cookie Extension` folder and the empty
+   `.substack_cookie.txt` file — everything should be directly inside
+   your one folder, nothing nested any deeper than that
+   - **Windows:** `.substack_cookie.txt` may be hidden. In File Explorer
+     click **View → Show → Hidden items** so you can see it
 
 ---
 
@@ -94,29 +97,24 @@ your own clipboard.
 4. You'll see your subdomain, numeric user ID, and a cookie count — that
    means it worked and all three are now copied together
 
-Now save it where the app can find it:
+Now paste it into the file that already comes with the app — don't
+create a new one:
 
-5. Open Notepad (or any plain text editor)
-6. Paste (Ctrl+V)
-7. Save the file as exactly: `.substack_cookie.txt`
-   - **Windows:** save it directly in your user folder — click "This PC"
-     → your Windows username folder (usually `C:\Users\YourName`) — not
-     inside Documents, Desktop, or any OneDrive/Google Drive folder
-   - **Mac:** save it in your Home folder (Finder → Go → Home)
-   - In the Notepad "Save As" box, make sure "Save as type" is set to
-     **All Files**, not "Text Documents" — otherwise Windows will secretly
-     save it as `.substack_cookie.txt.txt`, which won't work
-   - The pasted text will look like JSON (publication, user ID, and
-     cookie together). That's expected — don't try to extract only the
-     cookie part.
+5. In your `Substack App` folder, open `.substack_cookie.txt`
+   - **Windows:** if you don't see it, click **View → Show → Hidden
+     items**, then right-click the file → Open with → Notepad
+   - **Mac:** open it with TextEdit (plain text) or any text editor
+6. Paste (Ctrl+V / Cmd+V). The text will look like JSON (publication,
+   user ID, and cookie together) — that's expected
+7. Save and close the file
 
-**Why outside Documents/OneDrive/Google Drive specifically:** this cookie
-is a live login credential — anyone who has it can act as you on Substack
-until it expires (typically days to weeks). Keeping it out of any
-cloud-synced folder means it never accidentally gets uploaded anywhere.
+**This file is a live login credential** — anyone who has it can act as
+you on Substack until it expires (typically days to weeks). Don't email
+it, share it, or upload it anywhere.
 
 **This step will need repeating every few weeks**, whenever your cookie
-expires — same two clicks (extension → copy → paste over the old file).
+expires — same two clicks (extension → copy → paste over the old
+contents of `.substack_cookie.txt`).
 
 ---
 
@@ -152,8 +150,8 @@ expires — same two clicks (extension → copy → paste over the old file).
    Chrome automatically when done.
 
 If it prints an error about a missing cookie, that just means Step 4
-didn't quite land — double check the filename and location, then
-double-click the same `.bat` file again.
+didn't quite land — open `.substack_cookie.txt` in this same folder,
+paste again, save, then double-click the same `.bat` file again.
 
 ---
 
@@ -228,9 +226,8 @@ Python isn't installed, or was installed without the "Add to PATH" box
 checked. Reinstall from python.org and make sure that box is checked.
 
 **"ERROR: No Substack cookie found"**
-Redo Step 4 — your cookie file is either missing, in the wrong location,
-or accidentally saved as `.txt.txt`. Check "Save as type: All Files" in
-Notepad's save dialog.
+Redo Step 4 — open the `.substack_cookie.txt` file that came with the
+app, paste the extension copy, and save. Don't create a second file.
 
 **A pull runs but every number comes back as zero / empty**
 Almost always an expired cookie. Redo Step 4 (click the extension, copy,
@@ -252,8 +249,9 @@ point for figuring out what happened.
 
 ## Privacy notes
 
-- Your cookie and all your pulled data stay on your own computer, in the
-  `output` folder — nothing is sent to any third party
+- Your cookie stays in `.substack_cookie.txt` in this folder, and your
+  pulled data stays in the `output` folder — nothing is sent to any
+  third party. Don't share that cookie file.
 - The Chrome extension only ever reads cookies, subdomain, and user ID
   for Substack pages you have open yourself, and only copies to your
   own clipboard when you click the button — it doesn't run in the

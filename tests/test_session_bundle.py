@@ -18,6 +18,7 @@ def load_session_helpers(config_path, cookie_path):
     source = MAIN_PATH.read_text(encoding="utf-8")
     tree = ast.parse(source)
     wanted = {
+        "_app_dir",
         "normalize_publication",
         "cookie_file_candidates",
         "read_cookie_text",
@@ -39,6 +40,7 @@ def load_session_helpers(config_path, cookie_path):
     namespace = {
         "os": os,
         "json": json,
+        "__file__": str(MAIN_PATH),
         "CONFIG_PATH": config_path,
         "COOKIE_FILE_PATH": cookie_path,
     }
@@ -159,6 +161,10 @@ class LoadConfigFromBundleTests(unittest.TestCase):
             saved = json.load(f)
         self.assertEqual(saved, {"publication": "from-ext", "user_id": "987"})
         self.assertEqual(self.ns["get_cookie"](), "substack.sid=fresh")
+
+    def test_empty_cookie_file_is_ignored(self):
+        open(self.cookie_path, "w", encoding="utf-8").close()
+        self.assertIsNone(self.ns["get_cookie"]())
 
     def test_raw_cookie_looks_up_identity(self):
         with open(self.cookie_path, "w", encoding="utf-8") as f:

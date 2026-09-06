@@ -6,9 +6,10 @@ then builds a local dashboard and opens it in your browser automatically.
 
 FIRST-TIME SETUP: just run it.
     python main.py
-The first time you run this, it looks in your cookie file for the
-publication subdomain and numeric user ID that the Chrome extension
-copies alongside the session cookie. If those are there, setup is
+The first time you run this, it looks in `.substack_cookie.txt` (the
+empty file that ships next to this script — paste the Chrome
+extension copy there) for the session cookie plus publication
+subdomain and numeric user ID. If the cookie is present, setup is
 automatic. If not, it walks you through a short interactive prompt
 and saves your answers so every run after that skips straight to
 pulling your real data. See "Substack App - Setup & Usage Guide.md"
@@ -59,10 +60,17 @@ from urllib.error import HTTPError, URLError
 
 # ==================== FIRST-RUN SETUP WIZARD ====================
 CONFIG_PATH = "substack_app_config.json"
-# Cookie file lives outside any cloud-synced folder. The Chrome
-# extension copies a JSON bundle (cookie + subdomain + user ID) here;
-# older files that contain only the raw cookie string still work.
-COOKIE_FILE_PATH = os.path.expanduser("~/.substack_cookie.txt")
+# Cookie file ships empty next to this script. Paste the Chrome
+# extension copy into it. Older copies saved in the home folder still
+# work as a fallback. Cookie-only files (no JSON wrapper) still work.
+def _app_dir():
+    try:
+        return os.path.dirname(os.path.abspath(__file__))
+    except NameError:
+        return os.getcwd()
+
+
+COOKIE_FILE_PATH = os.path.join(_app_dir(), ".substack_cookie.txt")
 
 
 def normalize_publication(value):
@@ -81,8 +89,8 @@ def normalize_publication(value):
 def cookie_file_candidates():
     """Places we look for the cookie file, in order.
 
-    Windows Notepad often drops the leading dot or adds a second .txt,
-    and some people save the file next to the app instead of in Home.
+    The empty file that ships with the app is tried first. Empty files
+    are skipped, so a leftover copy in the home folder still works.
     """
     paths = []
 
@@ -91,16 +99,11 @@ def cookie_file_candidates():
             paths.append(path)
 
     add(COOKIE_FILE_PATH)
+    add(os.path.join(_app_dir(), "substack_cookie.txt"))
     home = os.path.expanduser("~")
     add(os.path.join(home, ".substack_cookie.txt"))
     add(os.path.join(home, "substack_cookie.txt"))
     add(os.path.join(home, ".substack_cookie.txt.txt"))
-    try:
-        here = os.path.dirname(os.path.abspath(__file__))
-    except NameError:
-        here = os.getcwd()
-    add(os.path.join(here, ".substack_cookie.txt"))
-    add(os.path.join(here, "substack_cookie.txt"))
     return paths
 
 
@@ -436,11 +439,9 @@ def print_no_cookie_error():
     print("  Windows (PowerShell): $env:SUBSTACK_COOKIE = \"paste it here\"")
     print("  macOS/Linux:          export SUBSTACK_COOKIE='paste it here'")
     print()
-    print(f"Option B — save it to a file (needed for unattended/scheduled runs):")
+    print("Option B — paste the Chrome extension copy into this file")
+    print("(it already exists in the app folder — don't create a new one):")
     print(f"  {COOKIE_FILE_PATH}")
-    print()
-    print("Use the Chrome extension to copy your session (cookie, subdomain,")
-    print("and user ID) and paste that into the file.")
 
 
 PUBLICATION, OWN_USER_ID = load_config()

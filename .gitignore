@@ -2,6 +2,9 @@
 # first-run wizard. Never share this; it's specific to your account.
 substack_app_config.json
 
+# The empty .substack_cookie.txt template is committed on purpose so
+# users can paste into it. Do not commit a filled-in copy.
+
 # Generated every time the app runs — your real database, CSVs, and
 # dashboard, all containing your real Substack data.
 output/
