@@ -124,12 +124,11 @@ expires — same two clicks (extension → copy → paste over the old file).
 
 1. Inside your `Substack App` folder, double-click **`Substack App - Run
    Dashboard.bat`**
-2. A black window (Command Prompt) will open. If Step 4 used the current
-   Chrome extension, it already copied your subdomain and numeric user
-   ID with the cookie — the app reads those from the file and will not
-   ask you to type them.
+2. A black window (Command Prompt) will open. The first time, the app
+   reads your cookie file and looks up your subdomain and numeric user
+   ID from your Substack session — you should not have to type them.
 
-   If your cookie file is an older cookie-only copy, the first run will
+   If that lookup fails (usually an expired or missing cookie), it will
    ask two quick questions instead:
 
    **"Your subdomain:"** — type the part of your Substack address before

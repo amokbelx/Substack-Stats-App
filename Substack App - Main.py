@@ -78,6 +78,43 @@ def normalize_publication(value):
     return raw or None
 
 
+def cookie_file_candidates():
+    """Places we look for the cookie file, in order.
+
+    Windows Notepad often drops the leading dot or adds a second .txt,
+    and some people save the file next to the app instead of in Home.
+    """
+    paths = []
+
+    def add(path):
+        if path and path not in paths:
+            paths.append(path)
+
+    add(COOKIE_FILE_PATH)
+    home = os.path.expanduser("~")
+    add(os.path.join(home, ".substack_cookie.txt"))
+    add(os.path.join(home, "substack_cookie.txt"))
+    add(os.path.join(home, ".substack_cookie.txt.txt"))
+    try:
+        here = os.path.dirname(os.path.abspath(__file__))
+    except NameError:
+        here = os.getcwd()
+    add(os.path.join(here, ".substack_cookie.txt"))
+    add(os.path.join(here, "substack_cookie.txt"))
+    return paths
+
+
+def read_cookie_text(path):
+    """Read a cookie file, including Notepad UTF-8 BOM / UTF-16 saves."""
+    with open(path, "rb") as f:
+        data = f.read()
+    if not data:
+        return ""
+    if data.startswith(b"\xff\xfe") or data.startswith(b"\xfe\xff"):
+        return data.decode("utf-16")
+    return data.decode("utf-8-sig")
+
+
 def parse_session_bundle(raw):
     """Parse a cookie file / env-var payload.
 
@@ -91,7 +128,7 @@ def parse_session_bundle(raw):
     result = {"cookie": None, "publication": None, "user_id": None}
     if raw is None:
         return result
-    text = raw.strip()
+    text = raw.strip().lstrip("\ufeff").strip()
     if not text:
         return result
 
@@ -126,14 +163,92 @@ def read_session_bundle():
     env_cookie = os.environ.get("SUBSTACK_COOKIE")
     if env_cookie:
         return parse_session_bundle(env_cookie)
-    if os.path.exists(COOKIE_FILE_PATH):
+    for path in cookie_file_candidates():
+        if not os.path.exists(path):
+            continue
         try:
-            with open(COOKIE_FILE_PATH, "r", encoding="utf-8") as f:
-                content = f.read()
-            return parse_session_bundle(content)
-        except OSError:
-            pass
+            content = read_cookie_text(path)
+        except (OSError, UnicodeDecodeError):
+            continue
+        bundle = parse_session_bundle(content)
+        if bundle.get("cookie") or bundle.get("publication") or bundle.get("user_id"):
+            return bundle
     return parse_session_bundle(None)
+
+
+def pick_publication_from_profile(data):
+    """Choose a publication subdomain from a /user/profile/self payload."""
+    rows = data.get("publicationUsers") if isinstance(data, dict) else None
+    if not rows:
+        return None
+    candidates = []
+    for row in rows:
+        pub = (row or {}).get("publication") or {}
+        subdomain = normalize_publication(pub.get("subdomain"))
+        if not subdomain:
+            continue
+        candidates.append({
+            "subdomain": subdomain,
+            "role": (row or {}).get("role") or "",
+            "is_primary": bool((row or {}).get("is_primary")),
+        })
+    if not candidates:
+        return None
+    for item in candidates:
+        if item["is_primary"]:
+            return item["subdomain"]
+    for item in candidates:
+        if item["role"] in ("admin", "editor"):
+            return item["subdomain"]
+    return candidates[0]["subdomain"]
+
+
+def fetch_identity_from_cookie(cookie):
+    """Ask Substack who this cookie belongs to.
+
+    Returns (publication, user_id); either value may be None if the
+    lookup fails or the profile is missing that field.
+    """
+    if not cookie:
+        return None, None
+    print("Looking up your publication and user ID from your Substack session...")
+    req = Request(
+        "https://substack.com/api/v1/user/profile/self",
+        headers={
+            "Cookie": cookie,
+            "User-Agent": (
+                "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
+                "AppleWebKit/537.36 (KHTML, like Gecko) "
+                "Chrome/120.0.0.0 Safari/537.36"
+            ),
+            "Accept": "application/json",
+        },
+    )
+    try:
+        with urlopen(req, timeout=15) as resp:
+            data = json.loads(resp.read().decode("utf-8"))
+    except HTTPError as e:
+        print(f"  [!] Could not look up your profile (HTTP {e.code}). Cookie may be expired.")
+        return None, None
+    except URLError as e:
+        print(f"  [!] Network error looking up your profile: {e.reason}")
+        return None, None
+    except json.JSONDecodeError:
+        print("  [!] Substack did not return a profile — cookie may be expired.")
+        return None, None
+
+    if not isinstance(data, dict):
+        return None, None
+
+    user_id = data.get("id")
+    if user_id is not None:
+        user_id = str(user_id).strip()
+        if not user_id.isdigit():
+            user_id = None
+    publication = pick_publication_from_profile(data)
+    if publication and user_id:
+        print(f"  Found {publication}.substack.com | user ID {user_id}")
+    return publication, user_id
 
 
 def get_cookie():
@@ -247,16 +362,30 @@ def load_config():
             pass  # fall through if the file got corrupted
 
     bundle = read_session_bundle()
-    if bundle.get("publication") and bundle.get("user_id"):
-        save_config(bundle["publication"], bundle["user_id"])
+    publication = bundle.get("publication")
+    user_id = bundle.get("user_id")
+
+    # Cookie-only files (the old extension format) still have a valid
+    # session — ask Substack for the missing identity instead of
+    # sending the user back to DevTools.
+    if (not publication or not user_id) and bundle.get("cookie"):
+        looked_up_pub, looked_up_uid = fetch_identity_from_cookie(bundle["cookie"])
+        publication = publication or looked_up_pub
+        user_id = user_id or looked_up_uid
+
+    if publication and user_id:
+        save_config(publication, user_id)
         print(
-            f"Using publication and user ID from your cookie file: "
-            f"{bundle['publication']}.substack.com | {bundle['user_id']}"
+            f"Using publication and user ID: "
+            f"{publication}.substack.com | {user_id}"
         )
         print()
-        return bundle["publication"], bundle["user_id"]
+        return publication, user_id
 
-    return run_setup_wizard(prefill=bundle)
+    return run_setup_wizard(prefill={
+        "publication": publication,
+        "user_id": user_id,
+    })
 
 
 # ==================== CONFIGURATION ====================
