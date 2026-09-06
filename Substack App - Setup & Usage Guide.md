@@ -122,6 +122,22 @@ contents of `.substack_cookie.txt`).
 
 1. Inside your `Substack App` folder, double-click **`Substack App - Run
    Dashboard.bat`**
+
+   **If Windows blocks it** (a warning that Windows protected your PC,
+   or nothing happens when you double-click), unblock it:
+
+   1. Right-click **`Substack App - Run Dashboard.bat`**
+   2. Click **Properties**
+   3. At the bottom of the General tab, check **Unblock** (next to
+      "This file came from another computer")
+   4. Click **Apply**, then **OK**
+   5. Double-click the file again
+
+   If you see **"Windows protected your PC"** instead: click **More
+   info**, then **Run anyway**.
+
+   You may need to unblock the other `.bat` files in this folder the
+   same way the first time you use each one.
 2. A black window (Command Prompt) will open. The first time, the app
    reads your cookie file and looks up your subdomain and numeric user
    ID from your Substack session — you should not have to type them.
@@ -220,6 +236,12 @@ generic advice.
 ---
 
 ## Troubleshooting
+
+**Windows says the file is blocked / "Windows protected your PC" / nothing happens when you double-click**
+Right-click the `.bat` file → **Properties** → check **Unblock** at
+the bottom of the General tab → **Apply** → **OK**. Then
+double-click it again. If you see "Windows protected your PC", click
+**More info**, then **Run anyway**.
 
 **"Could not find 'python' or 'py' on your PATH"**
 Python isn't installed, or was installed without the "Add to PATH" box
