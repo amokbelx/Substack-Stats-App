@@ -19,8 +19,12 @@ def load_session_helpers(config_path, cookie_path):
     tree = ast.parse(source)
     wanted = {
         "normalize_publication",
+        "cookie_file_candidates",
+        "read_cookie_text",
         "parse_session_bundle",
         "read_session_bundle",
+        "pick_publication_from_profile",
+        "fetch_identity_from_cookie",
         "get_cookie",
         "save_config",
         "load_config",
@@ -98,6 +102,15 @@ class ParseSessionBundleTests(unittest.TestCase):
         self.assertEqual(self.parse(None), empty)
         self.assertEqual(self.parse("   "), empty)
 
+    def test_bom_prefixed_json(self):
+        bundle = {
+            "publication": "demo",
+            "user_id": "1",
+            "cookie": "sid=1",
+        }
+        raw = "\ufeff" + json.dumps(bundle)
+        self.assertEqual(self.parse(raw), bundle)
+
     def test_normalize_publication(self):
         self.assertEqual(self.normalize("https://demo.substack.com/p/hi"), "demo")
         self.assertEqual(self.normalize("demo.substack.com"), "demo")
@@ -114,6 +127,9 @@ class LoadConfigFromBundleTests(unittest.TestCase):
         self.ns = load_session_helpers(self.config_path, self.cookie_path)
         self.ns["run_setup_wizard"] = lambda prefill=None: (_ for _ in ()).throw(
             AssertionError("wizard should not run")
+        )
+        self.ns["fetch_identity_from_cookie"] = lambda cookie: (_ for _ in ()).throw(
+            AssertionError("identity lookup should not run")
         )
 
     def tearDown(self):
@@ -144,6 +160,37 @@ class LoadConfigFromBundleTests(unittest.TestCase):
         self.assertEqual(saved, {"publication": "from-ext", "user_id": "987"})
         self.assertEqual(self.ns["get_cookie"](), "substack.sid=fresh")
 
+    def test_raw_cookie_looks_up_identity(self):
+        with open(self.cookie_path, "w", encoding="utf-8") as f:
+            f.write("substack.sid=abc123; other=xyz")
+        self.ns["fetch_identity_from_cookie"] = lambda cookie: ("looked-up", "777")
+        self.assertEqual(self.ns["load_config"](), ("looked-up", "777"))
+        with open(self.config_path, encoding="utf-8") as f:
+            saved = json.load(f)
+        self.assertEqual(saved, {"publication": "looked-up", "user_id": "777"})
+        self.assertEqual(self.ns["get_cookie"](), "substack.sid=abc123; other=xyz")
+
+    def test_json_with_null_identity_looks_up(self):
+        with open(self.cookie_path, "w", encoding="utf-8") as f:
+            json.dump({
+                "publication": None,
+                "user_id": None,
+                "cookie": "sid=fresh",
+            }, f)
+        self.ns["fetch_identity_from_cookie"] = lambda cookie: ("from-api", "42")
+        self.assertEqual(self.ns["load_config"](), ("from-api", "42"))
+
+    def test_utf16_notepad_json_file(self):
+        bundle = {
+            "publication": "utf16-pub",
+            "user_id": "321",
+            "cookie": "sid=utf16",
+        }
+        with open(self.cookie_path, "w", encoding="utf-16") as f:
+            f.write(json.dumps(bundle))
+        self.assertEqual(self.ns["load_config"](), ("utf16-pub", "321"))
+        self.assertEqual(self.ns["get_cookie"](), "sid=utf16")
+
     def test_env_var_json_bundle(self):
         old = os.environ.get("SUBSTACK_COOKIE")
         os.environ["SUBSTACK_COOKIE"] = json.dumps({
@@ -159,6 +206,35 @@ class LoadConfigFromBundleTests(unittest.TestCase):
                 os.environ.pop("SUBSTACK_COOKIE", None)
             else:
                 os.environ["SUBSTACK_COOKIE"] = old
+
+
+class PickPublicationTests(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls):
+        cls.ns = load_session_helpers("unused-config.json", "unused-cookie.txt")
+        cls.pick = staticmethod(cls.ns["pick_publication_from_profile"])
+
+    def test_prefers_primary(self):
+        data = {
+            "publicationUsers": [
+                {"publication": {"subdomain": "second"}, "role": "admin", "is_primary": False},
+                {"publication": {"subdomain": "primary"}, "role": "admin", "is_primary": True},
+            ]
+        }
+        self.assertEqual(self.pick(data), "primary")
+
+    def test_prefers_admin_when_no_primary(self):
+        data = {
+            "publicationUsers": [
+                {"publication": {"subdomain": "reader"}, "role": "subscriber", "is_primary": False},
+                {"publication": {"subdomain": "mine"}, "role": "admin", "is_primary": False},
+            ]
+        }
+        self.assertEqual(self.pick(data), "mine")
+
+    def test_empty(self):
+        self.assertIsNone(self.pick({}))
+        self.assertIsNone(self.pick({"publicationUsers": []}))
 
 
 if __name__ == "__main__":
