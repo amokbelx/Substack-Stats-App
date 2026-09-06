@@ -64,7 +64,7 @@ Step 2.
 
 ---
 
-## Step 3 — Install the Chrome extension (grabs your login cookie)
+## Step 3 — Install the Chrome extension (grabs your login session)
 
 This extension is what lets the app act as "you" when asking Substack for
 your stats — the same way your browser already proves who you are every
@@ -79,17 +79,20 @@ your own clipboard.
 5. You should now see "Substack App Cookie Copier" in your extensions list
 6. Click the puzzle-piece icon in Chrome's toolbar (near the address bar)
    and pin this extension so it's always one click away
+7. If you already had the extension installed from an earlier copy of
+   this app, go back to `chrome://extensions` and click **Reload** on
+   its card so it picks up the new session fields
 
 ---
 
-## Step 4 — Get your cookie
+## Step 4 — Get your cookie, subdomain, and user ID
 
 1. Go to your own Substack (e.g. `yourpublication.substack.com`), logged
    in as yourself, in Chrome
 2. Click the Substack App Cookie Copier icon you just pinned
-3. Click **"Copy cookie to clipboard"**
-4. You'll see a confirmation message with a character count — that means
-   it worked and your cookie is now copied
+3. Click **"Copy session to clipboard"**
+4. You'll see your subdomain, numeric user ID, and a cookie count — that
+   means it worked and all three are now copied together
 
 Now save it where the app can find it:
 
@@ -103,6 +106,9 @@ Now save it where the app can find it:
    - In the Notepad "Save As" box, make sure "Save as type" is set to
      **All Files**, not "Text Documents" — otherwise Windows will secretly
      save it as `.substack_cookie.txt.txt`, which won't work
+   - The pasted text will look like JSON (publication, user ID, and
+     cookie together). That's expected — don't try to extract only the
+     cookie part.
 
 **Why outside Documents/OneDrive/Google Drive specifically:** this cookie
 is a live login credential — anyone who has it can act as you on Substack
@@ -118,15 +124,20 @@ expires — same two clicks (extension → copy → paste over the old file).
 
 1. Inside your `Substack App` folder, double-click **`Substack App - Run
    Dashboard.bat`**
-2. A black window (Command Prompt) will open. The first time only, it'll
-   ask you two quick questions:
+2. A black window (Command Prompt) will open. If Step 4 used the current
+   Chrome extension, it already copied your subdomain and numeric user
+   ID with the cookie — the app reads those from the file and will not
+   ask you to type them.
+
+   If your cookie file is an older cookie-only copy, the first run will
+   ask two quick questions instead:
 
    **"Your subdomain:"** — type the part of your Substack address before
    `.substack.com`. If your Substack is at `example.substack.com`, type
    `example`
 
-   **"Your numeric user ID:"** — a number, not your name. The window will
-   walk you through finding it:
+   **"Your numeric user ID:"** — a number, not your name. The fastest
+   fix is to redo Step 4 with the updated extension. Or look it up:
    - Go to `substack.com/notes`, logged in
    - Press **F12** to open DevTools
    - Click the **Network** tab near the top of the DevTools panel
@@ -244,10 +255,10 @@ point for figuring out what happened.
 
 - Your cookie and all your pulled data stay on your own computer, in the
   `output` folder — nothing is sent to any third party
-- The Chrome extension only ever reads cookies for Substack pages you
-  have open yourself, and only copies to your own clipboard when you
-  click the button — it doesn't run in the background or send anything
-  anywhere
+- The Chrome extension only ever reads cookies, subdomain, and user ID
+  for Substack pages you have open yourself, and only copies to your
+  own clipboard when you click the button — it doesn't run in the
+  background or send anything anywhere
 - If you ever want to fully remove this app, delete the folder — there's
   nothing installed elsewhere on your system except the Chrome extension,
   which you can remove from `chrome://extensions`
