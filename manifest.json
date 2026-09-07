@@ -1,9 +1,9 @@
 {
   "manifest_version": 3,
   "name": "Substack App Cookie Copier",
-  "version": "1.1",
-  "description": "One-click copy of your Substack session cookie, publication subdomain, and numeric user ID for the Substack App stats tool. Reads them via Chrome's own official extension API — not a security bypass. Works with any Substack publication you're logged into.",
-  "permissions": ["cookies", "tabs", "scripting"],
+  "version": "1.2",
+  "description": "One-click save of your Substack session cookie, publication subdomain, and numeric user ID for the Substack App stats tool. Reads them via Chrome's own official extension API — not a security bypass. Works with any Substack publication you're logged into.",
+  "permissions": ["cookies", "tabs", "scripting", "downloads"],
   "host_permissions": ["*://*.substack.com/*", "*://substack.com/*"],
   "action": {
     "default_popup": "popup.html"

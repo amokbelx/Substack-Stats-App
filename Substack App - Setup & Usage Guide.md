@@ -72,7 +72,7 @@ Step 2.
 This extension is what lets the app act as "you" when asking Substack for
 your stats — the same way your browser already proves who you are every
 time you visit your own dashboard. It never sends anything anywhere except
-your own clipboard.
+the session file you save on your own computer.
 
 1. Open Chrome and go to `chrome://extensions` in the address bar
 2. Turn on **Developer mode** — a toggle switch in the top-right corner
@@ -84,7 +84,7 @@ your own clipboard.
    and pin this extension so it's always one click away
 7. If you already had the extension installed from an earlier copy of
    this app, go back to `chrome://extensions` and click **Reload** on
-   its card so it picks up the new session fields
+   its card so it picks up the new save-file button
 
 ---
 
@@ -93,28 +93,21 @@ your own clipboard.
 1. Go to your own Substack (e.g. `yourpublication.substack.com`), logged
    in as yourself, in Chrome
 2. Click the Substack App Cookie Copier icon you just pinned
-3. Click **"Copy session to clipboard"**
-4. You'll see your subdomain, numeric user ID, and a cookie count — that
-   means it worked and all three are now copied together
-
-Now paste it into the file that already comes with the app — don't
-create a new one:
-
-5. In your `Substack App` folder, open `.substack_cookie.txt`
-   - **Windows:** if you don't see it, click **View → Show → Hidden
-     items**, then right-click the file → Open with → Notepad
-   - **Mac:** open it with TextEdit (plain text) or any text editor
-6. Paste (Ctrl+V / Cmd+V). The text will look like JSON (publication,
-   user ID, and cookie together) — that's expected
-7. Save and close the file
+3. Click **"Save .substack_cookie.txt"**
+4. A save window opens with the filename already filled in. Go to your
+   `Substack App` folder and save there
+   - If it asks to replace the empty `.substack_cookie.txt` that's
+     already in the folder, say yes
+   - **Windows:** if you don't see that file in the folder, click
+     **View → Show → Hidden items** in the save window (or in File
+     Explorer first)
 
 **This file is a live login credential** — anyone who has it can act as
 you on Substack until it expires (typically days to weeks). Don't email
 it, share it, or upload it anywhere.
 
 **This step will need repeating every few weeks**, whenever your cookie
-expires — same two clicks (extension → copy → paste over the old
-contents of `.substack_cookie.txt`).
+expires — same clicks (extension → save over the old file).
 
 ---
 
@@ -166,8 +159,9 @@ contents of `.substack_cookie.txt`).
    Chrome automatically when done.
 
 If it prints an error about a missing cookie, that just means Step 4
-didn't quite land — open `.substack_cookie.txt` in this same folder,
-paste again, save, then double-click the same `.bat` file again.
+didn't quite land — run the extension again and save
+`.substack_cookie.txt` into this same folder, then double-click the
+same `.bat` file again.
 
 ---
 
@@ -248,12 +242,13 @@ Python isn't installed, or was installed without the "Add to PATH" box
 checked. Reinstall from python.org and make sure that box is checked.
 
 **"ERROR: No Substack cookie found"**
-Redo Step 4 — open the `.substack_cookie.txt` file that came with the
-app, paste the extension copy, and save. Don't create a second file.
+Redo Step 4 — use the extension to save `.substack_cookie.txt` into
+this same folder (replace the file that's already there). Don't
+create a second file somewhere else.
 
 **A pull runs but every number comes back as zero / empty**
-Almost always an expired cookie. Redo Step 4 (click the extension, copy,
-paste over the old file) and try again.
+Almost always an expired cookie. Redo Step 4 (click the extension, save
+over the old file) and try again.
 
 **The dashboard opens but looks broken / unstyled**
 Make sure every file from the download — including `Substack App -
@@ -275,8 +270,8 @@ point for figuring out what happened.
   pulled data stays in the `output` folder — nothing is sent to any
   third party. Don't share that cookie file.
 - The Chrome extension only ever reads cookies, subdomain, and user ID
-  for Substack pages you have open yourself, and only copies to your
-  own clipboard when you click the button — it doesn't run in the
+  for Substack pages you have open yourself, and only saves a file on
+  your computer when you click the button — it doesn't run in the
   background or send anything anywhere
 - If you ever want to fully remove this app, delete the folder — there's
   nothing installed elsewhere on your system except the Chrome extension,

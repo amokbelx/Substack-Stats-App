@@ -178,12 +178,58 @@ async function readIdentity(tabId) {
   }
 }
 
+function isUserCancel(err) {
+  const message = String(err && err.message ? err.message : err).toLowerCase();
+  return message.includes("cancel") || message.includes("canceled") || message.includes("cancelled");
+}
+
+function downloadNamedFile(dataUrl, filename) {
+  return new Promise((resolve, reject) => {
+    chrome.downloads.download(
+      {
+        url: dataUrl,
+        filename,
+        saveAs: true,
+        conflictAction: "overwrite",
+      },
+      (id) => {
+        if (chrome.runtime.lastError) {
+          reject(new Error(chrome.runtime.lastError.message));
+          return;
+        }
+        resolve(id);
+      }
+    );
+  });
+}
+
+// Chrome cannot write directly into the app folder. Opening a Save
+// dialog with the filename already filled in is the closest thing —
+// the user only has to pick the Substack App folder. A data: URL is
+// used so the download still finishes if this popup closes.
+async function saveSessionFile(contents) {
+  const dataUrl = "data:text/plain;charset=utf-8," + encodeURIComponent(contents);
+  const names = [".substack_cookie.txt", "substack_cookie.txt"];
+  let lastError = null;
+  for (const filename of names) {
+    try {
+      await downloadNamedFile(dataUrl, filename);
+      return filename;
+    } catch (err) {
+      lastError = err;
+      if (isUserCancel(err)) throw err;
+    }
+  }
+  throw lastError || new Error("Could not open the save dialog.");
+}
+
 if (typeof module !== "undefined" && module.exports) {
   module.exports = {
     subdomainFromHostname,
     normalizePublication,
     asUserId,
     pickPublication,
+    isUserCancel,
   };
 }
 
@@ -217,8 +263,10 @@ btn.addEventListener("click", async () => {
       cookie: cookieString,
     };
 
-    await navigator.clipboard.writeText(JSON.stringify(bundle, null, 2));
+    const contents = JSON.stringify(bundle, null, 2);
     showPreview(publication, userId, cookies.length);
+    setStatus("Save this file in your Substack App folder…", "");
+    await saveSessionFile(contents);
 
     if (!publication || !userId) {
       const missing = [
@@ -226,19 +274,23 @@ btn.addEventListener("click", async () => {
         !userId ? "user ID" : null,
       ].filter(Boolean).join(" and ");
       setStatus(
-        `Copied cookies, but could not find your ${missing}. ` +
+        `Saved cookies, but could not find your ${missing}. ` +
         `Open your own publication while logged in (not just substack.com) and try again.`,
         "error"
       );
     } else {
       setStatus(
-        `Copied subdomain, user ID, and ${cookies.length} cookie(s). ` +
-        `Paste this into your cookie file now.`,
+        `Saved subdomain, user ID, and ${cookies.length} cookie(s). ` +
+        `Make sure that file is in your Substack App folder.`,
         "success"
       );
     }
   } catch (err) {
-    setStatus(`Error: ${err.message || err}`, "error");
+    if (isUserCancel(err)) {
+      setStatus("Save cancelled.", "");
+    } else {
+      setStatus(`Error: ${err.message || err}`, "error");
+    }
   } finally {
     btn.disabled = false;
   }

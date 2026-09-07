@@ -16,6 +16,7 @@ const {
   normalizePublication,
   asUserId,
   pickPublication,
+  isUserCancel,
 } = require("../popup.js");
 
 assert.strictEqual(subdomainFromHostname("demo.substack.com"), "demo");
@@ -52,5 +53,9 @@ assert.strictEqual(
   }),
   "from-preloads"
 );
+
+assert.strictEqual(isUserCancel(new Error("Download canceled by the user.")), true);
+assert.strictEqual(isUserCancel(new Error("USER_CANCELED")), true);
+assert.strictEqual(isUserCancel(new Error("network failed")), false);
 
 console.log("test_popup_helpers.js: ok");
