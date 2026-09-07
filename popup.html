@@ -19,6 +19,9 @@
     line-height: 1.4;
     margin: 0 0 12px;
   }
+  .hint code {
+    font-size: 11px;
+  }
   button {
     width: 100%;
     padding: 10px;
@@ -67,13 +70,13 @@
 </head>
 <body>
   <h1>Substack Session Copier</h1>
-  <p class="hint">Open your publication while logged in. This copies your cookie, subdomain, and numeric user ID together.</p>
+  <p class="hint">Open your publication while logged in. This creates <code>.substack_cookie.txt</code> — save it in your Substack App folder (replace the empty file that's already there).</p>
   <dl id="preview" hidden>
     <div><dt>Subdomain</dt><dd id="pubValue">—</dd></div>
     <div><dt>User ID</dt><dd id="uidValue">—</dd></div>
     <div><dt>Cookies</dt><dd id="cookieValue">—</dd></div>
   </dl>
-  <button id="copyBtn">Copy session to clipboard</button>
+  <button id="copyBtn">Save .substack_cookie.txt</button>
   <div id="status"></div>
   <script src="popup.js"></script>
 </body>

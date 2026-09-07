@@ -7,10 +7,9 @@ then builds a local dashboard and opens it in your browser automatically.
 FIRST-TIME SETUP: just run it.
     python main.py
 The first time you run this, it looks in `.substack_cookie.txt` (the
-empty file that ships next to this script — paste the Chrome
-extension copy there) for the session cookie plus publication
-subdomain and numeric user ID. If the cookie is present, setup is
-automatic. If not, it walks you through a short interactive prompt
+file the Chrome extension saves next to this script) for the session
+cookie plus publication subdomain and numeric user ID. If the cookie
+is present, setup is automatic. If not, it walks you through a short interactive prompt
 and saves your answers so every run after that skips straight to
 pulling your real data. See "Substack App - Setup & Usage Guide.md"
 for the full walkthrough.
@@ -293,8 +292,8 @@ def run_setup_wizard(prefill=None):
         print("   web address. If your Substack is at https://example.substack.com,")
         print("   enter: example")
         print()
-        print("   The Chrome extension now copies this for you — if you re-copy")
-        print("   your session and paste it into the cookie file, you can skip")
+        print("   The Chrome extension now saves this for you — if you save")
+        print("   .substack_cookie.txt into this folder again, you can skip")
         print("   typing it here next time.")
         print()
         while not publication:
@@ -317,7 +316,7 @@ def run_setup_wizard(prefill=None):
         print("2. What's your numeric Substack user ID?")
         print("   This is a number, not your name or handle. Fastest way to find")
         print("   it is to use the Chrome extension included in this folder,")
-        print("   which now copies it with your cookie. If you'd rather look it")
+        print("   which now saves it with your cookie. If you'd rather look it")
         print("   up yourself:")
         print()
         print("   - Go to substack.com/notes, logged in as yourself")
@@ -439,8 +438,8 @@ def print_no_cookie_error():
     print("  Windows (PowerShell): $env:SUBSTACK_COOKIE = \"paste it here\"")
     print("  macOS/Linux:          export SUBSTACK_COOKIE='paste it here'")
     print()
-    print("Option B — paste the Chrome extension copy into this file")
-    print("(it already exists in the app folder — don't create a new one):")
+    print("Option B — use the Chrome extension's Save button and put")
+    print("the file here (replace the empty one that ships with the app):")
     print(f"  {COOKIE_FILE_PATH}")
 
 
