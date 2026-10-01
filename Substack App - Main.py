@@ -2013,6 +2013,7 @@ HTML_TEMPLATE = """<!DOCTYPE html>
     <button class="tab-btn" data-tab="notes">Notes</button>
     <button class="tab-btn" data-tab="comments">Comments</button>
     <button class="tab-btn" data-tab="subscribers">Subscribers</button>
+    <button class="tab-btn" data-tab="schedule">Schedule</button>
     <button class="tab-btn" data-tab="log">Log</button>
   </nav>
 
@@ -2243,6 +2244,10 @@ HTML_TEMPLATE = """<!DOCTYPE html>
         <tbody></tbody>
       </table>
     </section>
+  </div>
+
+  <div class="tab-panel" id="tab-schedule">
+    <div id="scheduleRoot"></div>
   </div>
 </main>
 
