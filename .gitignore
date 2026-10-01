@@ -9,6 +9,10 @@ substack_app_config.json
 # dashboard, all containing your real Substack data.
 output/
 
+# Scheduled Notes queue (also lives under output/, listed explicitly so
+# it is never committed even if output/ ignore rules change).
+output/scheduled_notes.json
+
 # Python cache files, safe to regenerate, never worth committing.
 __pycache__/
 *.pyc

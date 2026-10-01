@@ -176,6 +176,7 @@ You don't need to redo any of the above again. From here on:
 | Quick refresh, last 14 days | `Substack App - Refresh Last 14 Days.bat` |
 | Quick refresh, last 30 days | `Substack App - Refresh Last 30 Days.bat` |
 | Just reopen the dashboard, no new data | run the full refresh, then use the **↻ Refresh** button inside the dashboard itself |
+| Schedule Notes / let them auto-post | `Substack App - Start Server.bat` (leave the window open) |
 
 The "last N days" options are much faster than a full refresh, and are
 what you'll want most days — a full refresh is worth doing every week or
@@ -211,12 +212,72 @@ in the browser.
 - **Comments** — reader comments left on your posts, with a link back to
   read each one in context
 - **Subscribers** — growth over time, broken down by free/paid/founding
+- **Schedule** — plan Notes on a calendar and (when you're ready) let the
+  local server post them automatically while it's running
 - **Log** — a record of every time you've pulled data, so you always know
   when your numbers were last updated
 
 Every table can be searched, sorted by clicking any column header, and
 filtered by year and month. Click any post or note row to see its
 individual history over time.
+
+### Scheduling Notes
+
+The **Schedule** tab lets you write Notes ahead of time and pick when
+they should go out. This only works when the local server is running
+(double-click **`Substack App - Start Server.bat`** and leave that
+window open).
+
+**Important limitation:** Notes only auto-post while that server window
+is open **and** your computer is awake. If you close the window, put the
+PC to sleep, or lose power, due Notes will not go out. After about 15
+minutes late they show as **Missed** — they are never posted behind your
+back. You can then choose **Post now** or **Edit / Reschedule**.
+
+**Dry run (starts ON — leave it on at first):**  
+With Dry run checked, the scheduler does everything except send the Note
+to Substack. The server window will say `would have posted`, and the Note
+shows as **posted (dry run)**. Use this to practice safely. Turn Dry run
+**off** only when you're ready for real posts (and only after posting has
+been configured from a real browser capture — see below).
+
+**How to schedule a Note:**
+
+1. Start the server (`Start Server.bat`) and open the dashboard at
+   `http://localhost:8765/dashboard.html`
+2. Click the **Schedule** tab
+3. Click a day on the calendar (or **New Note**)
+4. Write your text, check the character count, set date/time, and confirm
+   the timezone (it defaults to your computer's local timezone)
+5. Click **Save**
+
+You can **Edit / Reschedule**, **Cancel**, **Delete**, or **Post now**
+(you'll get a confirmation prompt) from the list on the right.
+
+**Status colors (what each Note is doing):**
+
+- **draft** — saved but not scheduled
+- **scheduled** — waiting for its time
+- **posting** — being sent right now
+- **posted** / **posted (dry run)** — done (dry run means it was not
+  really sent)
+- **failed** — something went wrong; the error message is shown under the
+  Note
+- **missed** — the server was off too long past the scheduled time
+- **cancelled** — you cancelled it
+
+**Safety defaults:** automatic posts wait at least 5 minutes apart, and
+there is a daily maximum (default 10) you can change in the Schedule tab.
+If your cookie expires, posting pauses and a banner asks you to re-save
+`.substack_cookie.txt` with the Chrome extension.
+
+**Before real auto-posting works:** the app does not guess Substack's
+private “create Note” request. Keep Dry run ON, then in Chrome open
+`substack.com/notes`, DevTools → Network → Fetch/XHR, post a short test
+Note by hand, find that request, Copy as cURL, **replace the Cookie value
+with REDACTED**, and share that redacted request so the posting function
+can be finished. Until then, Post now / the scheduler will explain that
+posting is not configured yet (Dry run still works end-to-end).
 
 ### The content strategy button
 

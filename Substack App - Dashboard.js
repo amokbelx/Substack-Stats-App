@@ -15,7 +15,8 @@ const API_BASE = window.location.origin.startsWith('http://localhost') || window
 let statusPollTimer = null;
 
 function cpSetButtonsDisabled(disabled) {
-  document.querySelectorAll('.cp-btn').forEach(b => { b.disabled = disabled; });
+  // Only the Control Panel pull buttons — not Schedule / other .cp-btn controls.
+  document.querySelectorAll('#controlPanel .cp-btn').forEach(b => { b.disabled = disabled; });
 }
 
 function cpPollStatus() {
@@ -773,15 +774,615 @@ function buildCommentsTab() {
     null, 'post_title', null, 'commentsMonthTabs', 'url');
 }
 
-// ==================== TAB SWITCHING ====================
-document.querySelectorAll('.tab-btn').forEach(btn => {
-  btn.addEventListener('click', () => {
-    const tab = btn.dataset.tab;
-    document.querySelectorAll('.tab-btn').forEach(b => b.classList.toggle('active', b === btn));
-    document.querySelectorAll('.tab-panel').forEach(p => p.classList.toggle('active', p.id === `tab-${tab}`));
-    if (tab === 'notes') buildNotesTab();
-    if (tab === 'subscribers') buildSubscribersTab();
-    if (tab === 'log') buildLogTab();
-    if (tab === 'comments') buildCommentsTab();
+// ==================== SCHEDULE TAB ====================
+const SCHEDULE_MAX_CHARS = 3000;
+let scheduleState = {
+  notes: [],
+  settings: { dry_run: true, daily_max: 10 },
+  scheduler_running: false,
+  auth_blocked: false,
+  warning: '',
+  max_text_length: SCHEDULE_MAX_CHARS,
+  viewYear: null,
+  viewMonth: null, // 0-indexed
+  pollTimer: null,
+};
+let scheduleListenersBound = false;
+
+function localTimezone() {
+  try {
+    return Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC';
+  } catch (e) {
+    return 'UTC';
+  }
+}
+
+function ensureScheduleTab() {
+  const nav = document.querySelector('.tab-nav');
+  if (!nav) return;
+  if (!nav.querySelector('[data-tab="schedule"]')) {
+    const btn = document.createElement('button');
+    btn.className = 'tab-btn';
+    btn.dataset.tab = 'schedule';
+    btn.textContent = 'Schedule';
+    const logBtn = nav.querySelector('[data-tab="log"]');
+    if (logBtn) nav.insertBefore(btn, logBtn);
+    else nav.appendChild(btn);
+  }
+  if (!document.getElementById('tab-schedule')) {
+    const panel = document.createElement('div');
+    panel.className = 'tab-panel';
+    panel.id = 'tab-schedule';
+    panel.innerHTML = '<div id="scheduleRoot"></div>';
+    const main = document.querySelector('main');
+    if (main) main.appendChild(panel);
+  }
+  if (!document.getElementById('scheduleFormOverlay')) {
+    const overlay = document.createElement('div');
+    overlay.className = 'schedule-form-overlay';
+    overlay.id = 'scheduleFormOverlay';
+    overlay.innerHTML = `
+      <div class="schedule-form" role="dialog" aria-modal="true" aria-labelledby="scheduleFormTitle">
+        <h3 id="scheduleFormTitle">Schedule a Note</h3>
+        <label for="scheduleText">Note text</label>
+        <textarea id="scheduleText" maxlength="${SCHEDULE_MAX_CHARS}" placeholder="Write your Note…"></textarea>
+        <div class="schedule-charcount" id="scheduleCharCount">0 / ${SCHEDULE_MAX_CHARS}</div>
+        <div class="schedule-form-row">
+          <div>
+            <label for="scheduleDate">Date</label>
+            <input type="date" id="scheduleDate">
+          </div>
+          <div>
+            <label for="scheduleTime">Time</label>
+            <input type="time" id="scheduleTime">
+          </div>
+        </div>
+        <label for="scheduleTz">Timezone</label>
+        <input type="text" id="scheduleTz" placeholder="America/New_York">
+        <p class="no-trend" style="padding:8px 0 0;margin:0;">Uses your computer's local timezone by default. Change only if you know the IANA name (e.g. Europe/London).</p>
+        <input type="hidden" id="scheduleEditId" value="">
+        <div class="schedule-form-actions">
+          <button type="button" class="text-btn" id="scheduleFormCancel">Cancel</button>
+          <button type="button" class="cp-btn" id="scheduleFormSave">Save</button>
+        </div>
+      </div>`;
+    document.body.appendChild(overlay);
+  }
+}
+
+function scheduleEscape(s) {
+  return String(s == null ? '' : s)
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;');
+}
+
+function scheduleStatusLabel(note) {
+  if (note.status === 'posted' && note.dry_run_post) return 'posted (dry run)';
+  return note.status || 'unknown';
+}
+
+function scheduleFormatWhen(iso, tz) {
+  if (!iso) return '';
+  try {
+    const d = new Date(iso);
+    return d.toLocaleString(undefined, {
+      timeZone: tz || undefined,
+      weekday: 'short',
+      year: 'numeric',
+      month: 'short',
+      day: 'numeric',
+      hour: 'numeric',
+      minute: '2-digit',
+    });
+  } catch (e) {
+    return iso;
+  }
+}
+
+function scheduleYmdInTz(iso, tz) {
+  try {
+    const fmt = new Intl.DateTimeFormat('en-CA', {
+      timeZone: tz || localTimezone(),
+      year: 'numeric', month: '2-digit', day: '2-digit',
+    });
+    return fmt.format(new Date(iso)); // YYYY-MM-DD
+  } catch (e) {
+    return (iso || '').slice(0, 10);
+  }
+}
+
+function scheduleBuildLocalIso(dateStr, timeStr, tzName) {
+  // Build a timezone-aware ISO string for the chosen local wall time.
+  // We compute the offset for that timezone at that approximate UTC instant.
+  const [y, m, d] = dateStr.split('-').map(Number);
+  const [hh, mm] = (timeStr || '09:00').split(':').map(Number);
+  const probe = new Date(Date.UTC(y, m - 1, d, hh, mm, 0));
+  let offsetMin = 0;
+  try {
+    const parts = new Intl.DateTimeFormat('en-US', {
+      timeZone: tzName,
+      timeZoneName: 'shortOffset',
+      hour: '2-digit',
+      minute: '2-digit',
+      hourCycle: 'h23',
+    }).formatToParts(probe);
+    const tzPart = parts.find(p => p.type === 'timeZoneName');
+    const match = tzPart && tzPart.value.match(/GMT([+-])(\d{1,2})(?::?(\d{2}))?/);
+    if (match) {
+      const sign = match[1] === '-' ? -1 : 1;
+      offsetMin = sign * (parseInt(match[2], 10) * 60 + parseInt(match[3] || '0', 10));
+    } else {
+      // Fallback: difference between locale strings
+      const asUTC = new Date(probe.toLocaleString('en-US', { timeZone: 'UTC' }));
+      const asTZ = new Date(probe.toLocaleString('en-US', { timeZone: tzName }));
+      offsetMin = Math.round((asTZ - asUTC) / 60000);
+    }
+  } catch (e) {
+    offsetMin = -new Date().getTimezoneOffset();
+  }
+  // Wall time in tz = UTC + offset => UTC = wall - offset
+  const utcMs = Date.UTC(y, m - 1, d, hh, mm, 0) - offsetMin * 60000;
+  const dt = new Date(utcMs);
+  const sign = offsetMin >= 0 ? '+' : '-';
+  const abs = Math.abs(offsetMin);
+  const oh = String(Math.floor(abs / 60)).padStart(2, '0');
+  const om = String(abs % 60).padStart(2, '0');
+  const isoLocal = `${dateStr}T${String(hh).padStart(2, '0')}:${String(mm).padStart(2, '0')}:00${sign}${oh}:${om}`;
+  // Prefer the constructed offset form; validate
+  void dt;
+  return isoLocal;
+}
+
+async function scheduleFetch() {
+  if (!API_BASE) throw new Error('Schedule needs the local server (Start Server.bat).');
+  const r = await fetch(`${API_BASE}/api/schedule`);
+  if (!r.ok) throw new Error('Could not load schedule');
+  return r.json();
+}
+
+async function scheduleApi(method, path, body) {
+  const opts = { method, headers: { 'Content-Type': 'application/json' } };
+  if (body !== undefined) opts.body = JSON.stringify(body);
+  const r = await fetch(`${API_BASE}${path}`, opts);
+  const data = await r.json().catch(() => ({}));
+  if (!r.ok || data.ok === false) {
+    throw new Error(data.error || `Request failed (${r.status})`);
+  }
+  return data;
+}
+
+function scheduleOpenForm(prefill) {
+  ensureScheduleTab();
+  const overlay = document.getElementById('scheduleFormOverlay');
+  const title = document.getElementById('scheduleFormTitle');
+  const textEl = document.getElementById('scheduleText');
+  const dateEl = document.getElementById('scheduleDate');
+  const timeEl = document.getElementById('scheduleTime');
+  const tzEl = document.getElementById('scheduleTz');
+  const idEl = document.getElementById('scheduleEditId');
+  const tz = (prefill && prefill.timezone) || localTimezone();
+  tzEl.value = tz;
+  idEl.value = (prefill && prefill.id) || '';
+  title.textContent = prefill && prefill.id ? 'Edit scheduled Note' : 'Schedule a Note';
+  textEl.value = (prefill && prefill.text) || '';
+  if (prefill && prefill.scheduled_at) {
+    const ymd = scheduleYmdInTz(prefill.scheduled_at, tz);
+    dateEl.value = ymd;
+    try {
+      const parts = new Intl.DateTimeFormat('en-GB', {
+        timeZone: tz, hour: '2-digit', minute: '2-digit', hourCycle: 'h23',
+      }).formatToParts(new Date(prefill.scheduled_at));
+      const hh = parts.find(p => p.type === 'hour')?.value || '09';
+      const mm = parts.find(p => p.type === 'minute')?.value || '00';
+      timeEl.value = `${hh}:${mm}`;
+    } catch (e) {
+      timeEl.value = '09:00';
+    }
+  } else {
+    const base = prefill && prefill.dateYmd
+      ? new Date(prefill.dateYmd + 'T12:00:00')
+      : new Date();
+    if (!(prefill && prefill.dateYmd)) base.setMinutes(base.getMinutes() + 30);
+    const y = base.getFullYear();
+    const m = String(base.getMonth() + 1).padStart(2, '0');
+    const d = String(base.getDate()).padStart(2, '0');
+    dateEl.value = prefill && prefill.dateYmd ? prefill.dateYmd : `${y}-${m}-${d}`;
+    timeEl.value = prefill && prefill.dateYmd
+      ? '09:00'
+      : `${String(base.getHours()).padStart(2, '0')}:${String(base.getMinutes()).padStart(2, '0')}`;
+  }
+  scheduleUpdateCharCount();
+  overlay.classList.add('open');
+  textEl.focus();
+}
+
+function scheduleCloseForm() {
+  const overlay = document.getElementById('scheduleFormOverlay');
+  if (overlay) overlay.classList.remove('open');
+}
+
+function scheduleUpdateCharCount() {
+  const textEl = document.getElementById('scheduleText');
+  const countEl = document.getElementById('scheduleCharCount');
+  if (!textEl || !countEl) return;
+  const n = textEl.value.length;
+  const max = scheduleState.max_text_length || SCHEDULE_MAX_CHARS;
+  countEl.textContent = `${n} / ${max}`;
+  countEl.classList.toggle('over', n > max);
+}
+
+async function scheduleSaveForm() {
+  const text = document.getElementById('scheduleText').value;
+  const dateStr = document.getElementById('scheduleDate').value;
+  const timeStr = document.getElementById('scheduleTime').value;
+  const tz = document.getElementById('scheduleTz').value.trim() || localTimezone();
+  const editId = document.getElementById('scheduleEditId').value;
+  if (!text.trim()) {
+    alert('Please write some Note text.');
+    return;
+  }
+  if (!dateStr || !timeStr) {
+    alert('Please choose a date and time.');
+    return;
+  }
+  const scheduled_at = scheduleBuildLocalIso(dateStr, timeStr, tz);
+  try {
+    if (editId) {
+      await scheduleApi('PATCH', `/api/schedule/${editId}`, {
+        text, scheduled_at, timezone: tz, status: 'scheduled',
+      });
+    } else {
+      await scheduleApi('POST', '/api/schedule', {
+        text, scheduled_at, timezone: tz, status: 'scheduled',
+      });
+    }
+    scheduleCloseForm();
+    await refreshScheduleTab();
+  } catch (e) {
+    alert(e.message || 'Could not save Note');
+  }
+}
+
+function renderScheduleCalendar(rootNotes) {
+  const now = new Date();
+  if (scheduleState.viewYear == null) {
+    scheduleState.viewYear = now.getFullYear();
+    scheduleState.viewMonth = now.getMonth();
+  }
+  const y = scheduleState.viewYear;
+  const m = scheduleState.viewMonth;
+  const monthName = new Date(y, m, 1).toLocaleString(undefined, { month: 'long', year: 'numeric' });
+  const firstDow = new Date(y, m, 1).getDay(); // 0=Sun
+  const daysInMonth = new Date(y, m + 1, 0).getDate();
+  const todayYmd = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
+
+  const byDay = {};
+  rootNotes.forEach(n => {
+    if (['cancelled'].includes(n.status)) return;
+    const ymd = scheduleYmdInTz(n.scheduled_at, n.timezone || localTimezone());
+    if (!byDay[ymd]) byDay[ymd] = [];
+    byDay[ymd].push(n);
   });
+
+  const dows = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat']
+    .map(d => `<div class="schedule-cal-dow">${d}</div>`).join('');
+
+  let cells = '';
+  for (let i = 0; i < firstDow; i++) {
+    cells += `<button type="button" class="schedule-cal-cell muted" disabled></button>`;
+  }
+  for (let day = 1; day <= daysInMonth; day++) {
+    const ymd = `${y}-${String(m + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
+    const notes = byDay[ymd] || [];
+    const dots = notes.slice(0, 6).map(n =>
+      `<span class="schedule-dot ${scheduleEscape(n.status)}" title="${scheduleEscape(scheduleStatusLabel(n))}"></span>`
+    ).join('');
+    const cls = ['schedule-cal-cell'];
+    if (ymd === todayYmd) cls.push('today');
+    cells += `<button type="button" class="${cls.join(' ')}" data-cal-date="${ymd}">
+      <div class="schedule-cal-daynum">${day}</div>
+      <div class="schedule-cal-dots">${dots}</div>
+    </button>`;
+  }
+
+  return `
+    <div class="schedule-cal-header">
+      <button type="button" class="text-btn" id="scheduleCalPrev">← Prev</button>
+      <h2>${scheduleEscape(monthName)}</h2>
+      <button type="button" class="text-btn" id="scheduleCalNext">Next →</button>
+    </div>
+    <div class="schedule-cal-grid">${dows}${cells}</div>`;
+}
+
+function renderScheduleList(notes) {
+  // Show actionable notes + dry-run posts; hide cancelled and real posted.
+  const actionable = notes
+    .filter(n =>
+      ['draft', 'scheduled', 'posting', 'failed', 'missed'].includes(n.status)
+      || (n.status === 'posted' && n.dry_run_post)
+    )
+    .slice()
+    .sort((a, b) => String(a.scheduled_at).localeCompare(String(b.scheduled_at)));
+
+  if (!actionable.length) {
+    return `<p class="no-trend">No upcoming Notes yet. Click a day on the calendar (or “New Note”) to schedule one.</p>`;
+  }
+
+  return `<div class="schedule-list">${actionable.map(n => {
+    const canEdit = ['draft', 'scheduled', 'failed', 'missed'].includes(n.status);
+    const canPost = ['draft', 'scheduled', 'failed', 'missed'].includes(n.status);
+    const canCancel = ['draft', 'scheduled', 'failed', 'missed'].includes(n.status);
+    const err = n.last_error
+      ? `<p class="schedule-item-error">${scheduleEscape(n.last_error)}</p>`
+      : '';
+    return `<article class="schedule-item" data-note-id="${scheduleEscape(n.id)}">
+      <div class="schedule-item-top">
+        <span class="status-pill ${scheduleEscape(n.status)}">${scheduleEscape(scheduleStatusLabel(n))}</span>
+        <span class="schedule-item-meta">${scheduleEscape(scheduleFormatWhen(n.scheduled_at, n.timezone))} · ${scheduleEscape(n.timezone || '')}</span>
+      </div>
+      <p class="schedule-item-text">${scheduleEscape(n.text)}</p>
+      ${err}
+      <div class="schedule-item-actions">
+        ${canEdit ? `<button type="button" class="text-btn" data-action="edit">Edit / Reschedule</button>` : ''}
+        ${canPost ? `<button type="button" class="text-btn" data-action="post-now">Post now</button>` : ''}
+        ${canCancel ? `<button type="button" class="text-btn" data-action="cancel">Cancel</button>` : ''}
+        <button type="button" class="text-btn" data-action="delete">Delete</button>
+      </div>
+    </article>`;
+  }).join('')}</div>`;
+}
+
+function renderScheduleTab() {
+  ensureScheduleTab();
+  const root = document.getElementById('scheduleRoot');
+  if (!root) return;
+
+  if (!API_BASE) {
+    root.innerHTML = `
+      <div class="schedule-banner warn">
+        <strong>Local server required.</strong> Double-click
+        <em>Substack App - Start Server.bat</em> and open
+        <code>http://localhost:8765/dashboard.html</code> so scheduling and
+        auto-posting can run.
+      </div>`;
+    return;
+  }
+
+  const running = scheduleState.scheduler_running;
+  const dry = scheduleState.settings && scheduleState.settings.dry_run;
+  const auth = scheduleState.auth_blocked;
+  const banners = [];
+  banners.push(`<div class="schedule-banner ${running ? 'ok' : 'warn'}">
+    <strong>Scheduler: ${running ? 'running' : 'not running'}.</strong>
+    ${scheduleEscape(scheduleState.warning || 'Notes only auto-post while the server window is open and your computer is awake.')}
+  </div>`);
+  if (dry) {
+    banners.push(`<div class="schedule-banner warn">
+      <strong>Dry run is ON</strong> (recommended until you're ready).
+      The scheduler will mark due Notes as posted without sending them to Substack,
+      and will log “would have posted” in the server window.
+    </div>`);
+  } else {
+    banners.push(`<div class="schedule-banner danger">
+      <strong>Dry run is OFF.</strong> Due Notes will be sent to Substack for real
+      (once posting is configured). Keep the server window open.
+    </div>`);
+  }
+  if (auth) {
+    banners.push(`<div class="schedule-banner danger" id="scheduleAuthBanner">
+      <strong>Cookie problem — posting paused.</strong>
+      Re-save <code>.substack_cookie.txt</code> with the Chrome extension, then click
+      “Clear auth warning” below.
+    </div>`);
+  }
+
+  root.innerHTML = `
+    ${banners.join('')}
+    <div class="schedule-toolbar">
+      <div class="schedule-toolbar-left">
+        <button type="button" class="cp-btn" id="scheduleNewBtn">New Note</button>
+        <button type="button" class="text-btn" id="scheduleRefreshBtn">Refresh</button>
+        ${auth ? `<button type="button" class="text-btn" id="scheduleClearAuthBtn">Clear auth warning</button>` : ''}
+      </div>
+      <div class="schedule-toolbar-right">
+        <label class="schedule-toggle">
+          <input type="checkbox" id="scheduleDryRunToggle" ${dry ? 'checked' : ''}>
+          Dry run (no real posts)
+        </label>
+        <label class="schedule-toggle">
+          Daily max
+          <input type="number" id="scheduleDailyMax" min="1" max="100" value="${scheduleEscape(scheduleState.settings.daily_max || 10)}" style="width:64px;">
+        </label>
+      </div>
+    </div>
+    <div class="schedule-layout">
+      <section>
+        <h2 style="font-family:'Fraunces',serif;font-size:20px;margin:0 0 8px;">Calendar</h2>
+        <p class="no-trend" style="padding:0 0 12px;">Click a day to schedule a Note for that date.</p>
+        <div id="scheduleCalendar">${renderScheduleCalendar(scheduleState.notes)}</div>
+      </section>
+      <section>
+        <h2 style="font-family:'Fraunces',serif;font-size:20px;margin:0 0 8px;">Upcoming &amp; needs attention</h2>
+        <p class="no-trend" style="padding:0 0 12px;">Edit, reschedule, cancel, or post immediately.</p>
+        <div id="scheduleList">${renderScheduleList(scheduleState.notes)}</div>
+      </section>
+    </div>`;
+
+  bindScheduleDom();
+}
+
+function bindScheduleDom() {
+  const prev = document.getElementById('scheduleCalPrev');
+  const next = document.getElementById('scheduleCalNext');
+  if (prev) prev.onclick = () => {
+    scheduleState.viewMonth -= 1;
+    if (scheduleState.viewMonth < 0) { scheduleState.viewMonth = 11; scheduleState.viewYear -= 1; }
+    renderScheduleTab();
+  };
+  if (next) next.onclick = () => {
+    scheduleState.viewMonth += 1;
+    if (scheduleState.viewMonth > 11) { scheduleState.viewMonth = 0; scheduleState.viewYear += 1; }
+    renderScheduleTab();
+  };
+  document.querySelectorAll('[data-cal-date]').forEach(btn => {
+    btn.addEventListener('click', (e) => {
+      e.preventDefault();
+      scheduleOpenForm({ dateYmd: btn.dataset.calDate });
+    });
+  });
+  const newBtn = document.getElementById('scheduleNewBtn');
+  if (newBtn) {
+    newBtn.addEventListener('click', (e) => {
+      e.preventDefault();
+      scheduleOpenForm({});
+    });
+  }
+  const refreshBtn = document.getElementById('scheduleRefreshBtn');
+  if (refreshBtn) {
+    refreshBtn.addEventListener('click', (e) => {
+      e.preventDefault();
+      refreshScheduleTab();
+    });
+  }
+  const dry = document.getElementById('scheduleDryRunToggle');
+  if (dry) dry.addEventListener('change', async () => {
+    try {
+      await scheduleApi('POST', '/api/schedule/settings', { dry_run: dry.checked });
+      await refreshScheduleTab();
+    } catch (e) { alert(e.message); }
+  });
+  const daily = document.getElementById('scheduleDailyMax');
+  if (daily) daily.addEventListener('change', async () => {
+    try {
+      await scheduleApi('POST', '/api/schedule/settings', { daily_max: parseInt(daily.value, 10) });
+      await refreshScheduleTab();
+    } catch (e) { alert(e.message); }
+  });
+  const clearAuth = document.getElementById('scheduleClearAuthBtn');
+  if (clearAuth) clearAuth.addEventListener('click', async (e) => {
+    e.preventDefault();
+    try {
+      await scheduleApi('POST', '/api/schedule/settings', { clear_auth_blocked: true });
+      await refreshScheduleTab();
+    } catch (e2) { alert(e2.message); }
+  });
+  document.querySelectorAll('.schedule-item').forEach(item => {
+    const id = item.dataset.noteId;
+    item.querySelectorAll('[data-action]').forEach(btn => {
+      btn.addEventListener('click', async (e) => {
+        e.preventDefault();
+        const action = btn.dataset.action;
+        const note = scheduleState.notes.find(n => n.id === id);
+        try {
+          if (action === 'edit') {
+            scheduleOpenForm(note);
+          } else if (action === 'cancel') {
+            if (!confirm('Cancel this scheduled Note?')) return;
+            await scheduleApi('POST', `/api/schedule/${id}/cancel`, {});
+            await refreshScheduleTab();
+          } else if (action === 'delete') {
+            if (!confirm('Delete this Note from your schedule? This cannot be undone.')) return;
+            await scheduleApi('POST', `/api/schedule/${id}/delete`, {});
+            await refreshScheduleTab();
+          } else if (action === 'post-now') {
+            const dryRun = scheduleState.settings && scheduleState.settings.dry_run;
+            const msg = dryRun
+              ? 'Post now in DRY RUN mode? Nothing will be sent to Substack; it will be marked posted (dry run).'
+              : 'Post this Note to Substack NOW? This cannot be undone from this app.';
+            if (!confirm(msg)) return;
+            await scheduleApi('POST', `/api/schedule/${id}/post-now`, {});
+            await refreshScheduleTab();
+          }
+        } catch (err) {
+          alert(err.message || 'Action failed');
+          await refreshScheduleTab();
+        }
+      });
+    });
+  });
+}
+
+function bindScheduleFormOnce() {
+  if (scheduleListenersBound) return;
+  scheduleListenersBound = true;
+  ensureScheduleTab();
+  const textEl = document.getElementById('scheduleText');
+  if (textEl) textEl.addEventListener('input', scheduleUpdateCharCount);
+  const cancel = document.getElementById('scheduleFormCancel');
+  if (cancel) cancel.addEventListener('click', scheduleCloseForm);
+  const save = document.getElementById('scheduleFormSave');
+  if (save) save.addEventListener('click', scheduleSaveForm);
+  const overlay = document.getElementById('scheduleFormOverlay');
+  if (overlay) {
+    overlay.addEventListener('click', (e) => {
+      if (e.target === overlay) scheduleCloseForm();
+    });
+  }
+}
+
+async function refreshScheduleTab() {
+  if (!API_BASE) {
+    renderScheduleTab();
+    return;
+  }
+  try {
+    const data = await scheduleFetch();
+    scheduleState.notes = data.notes || [];
+    scheduleState.settings = data.settings || { dry_run: true, daily_max: 10 };
+    scheduleState.scheduler_running = !!data.scheduler_running;
+    scheduleState.auth_blocked = !!data.auth_blocked;
+    scheduleState.warning = data.warning || '';
+    scheduleState.max_text_length = data.max_text_length || SCHEDULE_MAX_CHARS;
+    renderScheduleTab();
+  } catch (e) {
+    const root = document.getElementById('scheduleRoot');
+    if (root) {
+      root.innerHTML = `<div class="schedule-banner danger"><strong>Could not load schedule.</strong> ${scheduleEscape(e.message)} Make sure Start Server.bat is running.</div>`;
+    }
+  }
+}
+
+function buildScheduleTab() {
+  ensureScheduleTab();
+  bindScheduleFormOnce();
+  refreshScheduleTab();
+  if (API_BASE && !scheduleState.pollTimer) {
+    scheduleState.pollTimer = setInterval(() => {
+      const panel = document.getElementById('tab-schedule');
+      if (panel && panel.classList.contains('active')) refreshScheduleTab();
+    }, 10000);
+  }
+}
+
+ensureScheduleTab();
+bindScheduleFormOnce();
+
+// ==================== TAB SWITCHING ====================
+function activateDashboardTab(tab) {
+  document.querySelectorAll('.tab-btn').forEach(b => b.classList.toggle('active', b.dataset.tab === tab));
+  document.querySelectorAll('.tab-panel').forEach(p => p.classList.toggle('active', p.id === `tab-${tab}`));
+  if (tab === 'notes') buildNotesTab();
+  if (tab === 'subscribers') buildSubscribersTab();
+  if (tab === 'log') buildLogTab();
+  if (tab === 'comments') buildCommentsTab();
+  if (tab === 'schedule') buildScheduleTab();
+}
+
+document.querySelectorAll('.tab-btn').forEach(btn => {
+  btn.addEventListener('click', () => activateDashboardTab(btn.dataset.tab));
 });
+
+// Deep-link: ?tab=schedule or #schedule opens the Schedule tab on load.
+(function openTabFromUrl() {
+  try {
+    const params = new URLSearchParams(window.location.search);
+    const fromQuery = params.get('tab');
+    const fromHash = (window.location.hash || '').replace(/^#/, '');
+    const tab = fromQuery || fromHash;
+    if (tab && document.querySelector(`.tab-btn[data-tab="${tab}"]`)) {
+      activateDashboardTab(tab);
+    }
+  } catch (e) { /* ignore */ }
+})();
