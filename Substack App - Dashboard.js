@@ -1226,37 +1226,52 @@ function bindScheduleDom() {
     renderScheduleTab();
   };
   document.querySelectorAll('[data-cal-date]').forEach(btn => {
-    btn.onclick = () => scheduleOpenForm({ dateYmd: btn.dataset.calDate });
+    btn.addEventListener('click', (e) => {
+      e.preventDefault();
+      scheduleOpenForm({ dateYmd: btn.dataset.calDate });
+    });
   });
   const newBtn = document.getElementById('scheduleNewBtn');
-  if (newBtn) newBtn.onclick = () => scheduleOpenForm({});
+  if (newBtn) {
+    newBtn.addEventListener('click', (e) => {
+      e.preventDefault();
+      scheduleOpenForm({});
+    });
+  }
   const refreshBtn = document.getElementById('scheduleRefreshBtn');
-  if (refreshBtn) refreshBtn.onclick = () => refreshScheduleTab();
+  if (refreshBtn) {
+    refreshBtn.addEventListener('click', (e) => {
+      e.preventDefault();
+      refreshScheduleTab();
+    });
+  }
   const dry = document.getElementById('scheduleDryRunToggle');
-  if (dry) dry.onchange = async () => {
+  if (dry) dry.addEventListener('change', async () => {
     try {
       await scheduleApi('POST', '/api/schedule/settings', { dry_run: dry.checked });
       await refreshScheduleTab();
     } catch (e) { alert(e.message); }
-  };
+  });
   const daily = document.getElementById('scheduleDailyMax');
-  if (daily) daily.onchange = async () => {
+  if (daily) daily.addEventListener('change', async () => {
     try {
       await scheduleApi('POST', '/api/schedule/settings', { daily_max: parseInt(daily.value, 10) });
       await refreshScheduleTab();
     } catch (e) { alert(e.message); }
-  };
+  });
   const clearAuth = document.getElementById('scheduleClearAuthBtn');
-  if (clearAuth) clearAuth.onclick = async () => {
+  if (clearAuth) clearAuth.addEventListener('click', async (e) => {
+    e.preventDefault();
     try {
       await scheduleApi('POST', '/api/schedule/settings', { clear_auth_blocked: true });
       await refreshScheduleTab();
-    } catch (e) { alert(e.message); }
-  };
+    } catch (e2) { alert(e2.message); }
+  });
   document.querySelectorAll('.schedule-item').forEach(item => {
     const id = item.dataset.noteId;
     item.querySelectorAll('[data-action]').forEach(btn => {
-      btn.onclick = async () => {
+      btn.addEventListener('click', async (e) => {
+        e.preventDefault();
         const action = btn.dataset.action;
         const note = scheduleState.notes.find(n => n.id === id);
         try {
@@ -1279,11 +1294,11 @@ function bindScheduleDom() {
             await scheduleApi('POST', `/api/schedule/${id}/post-now`, {});
             await refreshScheduleTab();
           }
-        } catch (e) {
-          alert(e.message || 'Action failed');
+        } catch (err) {
+          alert(err.message || 'Action failed');
           await refreshScheduleTab();
         }
-      };
+      });
     });
   });
 }
@@ -1341,17 +1356,32 @@ function buildScheduleTab() {
 }
 
 ensureScheduleTab();
+bindScheduleFormOnce();
 
 // ==================== TAB SWITCHING ====================
+function activateDashboardTab(tab) {
+  document.querySelectorAll('.tab-btn').forEach(b => b.classList.toggle('active', b.dataset.tab === tab));
+  document.querySelectorAll('.tab-panel').forEach(p => p.classList.toggle('active', p.id === `tab-${tab}`));
+  if (tab === 'notes') buildNotesTab();
+  if (tab === 'subscribers') buildSubscribersTab();
+  if (tab === 'log') buildLogTab();
+  if (tab === 'comments') buildCommentsTab();
+  if (tab === 'schedule') buildScheduleTab();
+}
+
 document.querySelectorAll('.tab-btn').forEach(btn => {
-  btn.addEventListener('click', () => {
-    const tab = btn.dataset.tab;
-    document.querySelectorAll('.tab-btn').forEach(b => b.classList.toggle('active', b === btn));
-    document.querySelectorAll('.tab-panel').forEach(p => p.classList.toggle('active', p.id === `tab-${tab}`));
-    if (tab === 'notes') buildNotesTab();
-    if (tab === 'subscribers') buildSubscribersTab();
-    if (tab === 'log') buildLogTab();
-    if (tab === 'comments') buildCommentsTab();
-    if (tab === 'schedule') buildScheduleTab();
-  });
+  btn.addEventListener('click', () => activateDashboardTab(btn.dataset.tab));
 });
+
+// Deep-link: ?tab=schedule or #schedule opens the Schedule tab on load.
+(function openTabFromUrl() {
+  try {
+    const params = new URLSearchParams(window.location.search);
+    const fromQuery = params.get('tab');
+    const fromHash = (window.location.hash || '').replace(/^#/, '');
+    const tab = fromQuery || fromHash;
+    if (tab && document.querySelector(`.tab-btn[data-tab="${tab}"]`)) {
+      activateDashboardTab(tab);
+    }
+  } catch (e) { /* ignore */ }
+})();
