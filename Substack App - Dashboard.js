@@ -15,7 +15,8 @@ const API_BASE = window.location.origin.startsWith('http://localhost') || window
 let statusPollTimer = null;
 
 function cpSetButtonsDisabled(disabled) {
-  document.querySelectorAll('.cp-btn').forEach(b => { b.disabled = disabled; });
+  // Only the Control Panel pull buttons — not Schedule / other .cp-btn controls.
+  document.querySelectorAll('#controlPanel .cp-btn').forEach(b => { b.disabled = disabled; });
 }
 
 function cpPollStatus() {
